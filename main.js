@@ -1,66 +1,63 @@
-import { Actor, log } from 'apify';
-import { CheerioCrawler } from 'crawlee';
+import { Actor } from 'apify';
+import { PlaywrightCrawler } from 'crawlee';
 
 await Actor.init();
 
-const input = await Actor.getInput();
-// expected: { startUrls: [{ url: "https://..." }], maxRequestsPerCrawl?: number }
+const input = (await Actor.getInput()) ?? {};
+// Accept both [{ url }] and ["https://..."] shapes
+const startUrls = (input.startUrls ?? [])
+  .map((u) => (typeof u === 'string' ? u : u.url))
+  .filter(Boolean);
 
-if (!input?.startUrls?.length) {
-  log.error('No startUrls in INPUT. Aborting.');
-  await Actor.exit();
-}
+const maxRequestsPerCrawl = input.maxRequestsPerCrawl ?? 1;
 
-const sources = input.startUrls
-  .filter(s => s?.url)
-  .map(s => ({ url: s.url }));
+const crawler = new PlaywrightCrawler({
+  maxRequestsPerCrawl,
+  headless: true,
+  // optional: helps with some bot protections
+  launchContext: { useChrome: true },
 
-let pushed = 0;
+  requestHandler: async ({ page, request, log }) => {
+    await page.waitForLoadState('domcontentloaded');
 
-const crawler = new CheerioCrawler({
-  maxRequestsPerCrawl: input.maxRequestsPerCrawl ?? 1,
-  requestHandler: async ({ request, $ }) => {
-    const title = $('h1').first().text().trim();
+    // Title
+    const title = await page.title();
 
-    // features/bullets (cap at 8, strip empty)
-    const bullets = $('li')
-      .map((i, el) => $(el).text().trim())
-      .get()
-      .filter(Boolean)
-      .slice(0, 8);
+    // First few bullet-like items (very generic, adjust as needed)
+    const bullets = await page.$$eval('li', (els) =>
+      els
+        .map((el) => el.textContent?.trim())
+        .filter(Boolean)
+        .slice(0, 8)
+    );
 
-    // absolute image URLs only
-    const imgs = $('img')
-      .map((i, el) => $(el).attr('src'))
-      .get()
-      .filter(Boolean)
-      .map(src => {
-        try {
-          return new URL(src, request.loadedUrl || request.url).href;
-        } catch {
-          return null;
-        }
-      })
-      .filter(u => /^https?:/i.test(u));
+    // Image URLs
+    const imgs = await page.$$eval('img', (els) =>
+      els
+        .map((el) => el.src)
+        .filter((s) => /^https?:\/\//i.test(s))
+    );
 
-    const item = {
+    // Always push something so you see output even if selectors miss
+    await Actor.pushData({
       url: request.loadedUrl || request.url,
-      title,
+      title: title || null,
       bullets,
       imgs,
-    };
+    });
 
-    await Actor.pushData(item);
-    pushed += 1;
-    log.info(`Pushed item ${pushed}`, { url: item.url, title: item.title });
+    log.info(`Saved item for ${request.url}`);
   },
-  failedRequestHandler: async ({ request }) => {
-    log.error('Failed request', { url: request.url });
+
+  failedRequestHandler: async ({ request, log }) => {
+    log.error(`Failed ${request.url}`);
+    await Actor.pushData({ url: request.url, error: 'request_failed' });
   },
 });
 
-log.info('Starting crawl', { count: sources.length, firstUrl: sources[0]?.url });
-await crawler.run(sources);
-log.info(`Done. Total items pushed: ${pushed}`);
+// Fallback so the actor still runs from n8n if nothing is passed
+const seeds = startUrls.length ? startUrls : ['https://www.veed.io/create/ai-video-generator'];
+
+await crawler.run(seeds);
 
 await Actor.exit();
