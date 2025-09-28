@@ -1,0 +1,14 @@
+{
+  "name": "pdp-scraper",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "node main.mjs",
+    "build": "echo \"no build step\""
+  },
+  "dependencies": {
+    "apify": "^3.1.9",
+    "crawlee": "^3.6.4"
+  }
+}
