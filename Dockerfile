@@ -1,14 +1,14 @@
 FROM apify/actor-node-playwright-chrome:20
 
 WORKDIR /usr/src/app
-
-# Use the non-root user for installing deps and running the actor
 USER myuser
 
+# Copy only manifests first
 COPY --chown=myuser:myuser package*.json ./
-# If there’s no lockfile, npm ci will fail; fall back to npm install
-RUN npm ci --omit=dev || npm install --omit=dev
 
+# No lockfile? then just install
+RUN npm install --omit=dev
+
+# Copy the rest and run
 COPY --chown=myuser:myuser . ./
-
 CMD ["node", "main.js"]
