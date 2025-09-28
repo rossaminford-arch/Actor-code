@@ -1,17 +1,22 @@
-# syntax=docker/dockerfile:1
-
-# Includes Playwright + Chrome and all required OS deps
+# Includes Playwright + Chrome + all system deps
 FROM apify/actor-node-playwright-chrome:20
 
+# Make sure the workdir exists and belongs to myuser
+USER root
+RUN mkdir -p /usr/src/app && chown -R myuser:myuser /usr/src/app
 WORKDIR /usr/src/app
 
-# Install only your npm deps; give myuser write access
-COPY --chown=myuser:myuser package*.json ./
-# If you have a package-lock.json, prefer: RUN npm ci --omit=dev
-RUN npm install --omit=dev
+# Switch to myuser so npm writes to a writable dir
+USER myuser
 
-# Add the rest of your code
+# Copy manifests with the right ownership (VERY important)
+COPY --chown=myuser:myuser package*.json ./
+
+# Install deps (use ci if you have a lockfile; fallback to install)
+RUN npm ci --omit=dev || npm install --omit=dev
+
+# Copy the rest of the code, also with the right ownership
 COPY --chown=myuser:myuser . ./
 
-# Start the actor
+# Start your actor
 CMD ["npm", "start"]
