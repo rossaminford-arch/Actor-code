@@ -3,61 +3,46 @@ import { PlaywrightCrawler } from 'crawlee';
 
 await Actor.init();
 
+// Expected input:
+// { "startUrls": [{ "url": "https://example.com" }], "maxRequestsPerCrawl": 1 }
 const input = (await Actor.getInput()) ?? {};
-// Accept both [{ url }] and ["https://..."] shapes
-const startUrls = (input.startUrls ?? [])
-  .map((u) => (typeof u === 'string' ? u : u.url))
-  .filter(Boolean);
-
-const maxRequestsPerCrawl = input.maxRequestsPerCrawl ?? 1;
+const startUrls = (input.startUrls ?? []).map(u => u.url ?? u);
+const maxReq = input.maxRequestsPerCrawl ?? 1;
 
 const crawler = new PlaywrightCrawler({
-  maxRequestsPerCrawl,
-  headless: true,
-  // optional: helps with some bot protections
-  launchContext: { useChrome: true },
-
+  maxRequestsPerCrawl: maxReq,
+  // default Chromium from Playwright
   requestHandler: async ({ page, request, log }) => {
-    await page.waitForLoadState('domcontentloaded');
+    // Try to settle the page
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
 
-    // Title
-    const title = await page.title();
+    // Optional: dismiss common cookie banners quietly
+    const acceptBtn = page.locator('button:has-text("Accept"), button:has-text("I agree"), button:has-text("Agree")');
+    await acceptBtn.first().click({ timeout: 2000 }).catch(() => {});
 
-    // First few bullet-like items (very generic, adjust as needed)
-    const bullets = await page.$$eval('li', (els) =>
-      els
-        .map((el) => el.textContent?.trim())
+    const title = (await page.title())?.trim() ?? '';
+
+    // Keep only a handful of visible bullet-like <li> items
+    const bullets = await page.$$eval('li', els =>
+      els.slice(0, 8)
+        .map(e => e.textContent?.trim())
         .filter(Boolean)
-        .slice(0, 8)
     );
 
-    // Image URLs
-    const imgs = await page.$$eval('img', (els) =>
-      els
-        .map((el) => el.src)
-        .filter((s) => /^https?:\/\//i.test(s))
+    // Absolute image URLs
+    const imgs = await page.$$eval('img', els =>
+      els.map(e => e.src).filter(u => /^https?:\/\//i.test(u))
     );
 
-    // Always push something so you see output even if selectors miss
     await Actor.pushData({
-      url: request.loadedUrl || request.url,
-      title: title || null,
+      url: request.loadedUrl ?? request.url,
+      title,
       bullets,
-      imgs,
+      imgs
     });
-
-    log.info(`Saved item for ${request.url}`);
-  },
-
-  failedRequestHandler: async ({ request, log }) => {
-    log.error(`Failed ${request.url}`);
-    await Actor.pushData({ url: request.url, error: 'request_failed' });
   },
 });
 
-// Fallback so the actor still runs from n8n if nothing is passed
-const seeds = startUrls.length ? startUrls : ['https://www.veed.io/create/ai-video-generator'];
-
-await crawler.run(seeds);
-
+await crawler.run(startUrls.length ? startUrls : []);
 await Actor.exit();
