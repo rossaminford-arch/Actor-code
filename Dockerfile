@@ -1,10 +1,14 @@
-# Playwright-ready image (includes Chrome + deps)
+# Dockerfile
 FROM apify/actor-node-playwright-chrome:20
+WORKDIR /usr/src/app
 
-# Install deps
-COPY package*.json ./
-RUN npm ci --omit=dev && npx playwright install --with-deps
+# install deps
+COPY package.json ./
+RUN npm install --omit=dev   # <-- use npm install, no lockfile needed
 
-# Copy source and run
+# if you want, you can keep this line, but on this image it's optional
+# RUN npx playwright install --with-deps
+
+# copy the rest and run
 COPY . ./
 CMD ["npm","start"]
