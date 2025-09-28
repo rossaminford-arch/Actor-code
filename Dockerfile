@@ -1,14 +1,19 @@
 # Dockerfile
 FROM apify/actor-node-playwright-chrome:20
+
 WORKDIR /usr/src/app
 
-# install deps
-COPY package.json ./
-RUN npm install --omit=dev   # <-- use npm install, no lockfile needed
+# Copy manifests with correct ownership
+COPY --chown=myuser:myuser package.json ./
+# If you have a lockfile, include it too:
+# COPY --chown=myuser:myuser package-lock.json ./
 
-# if you want, you can keep this line, but on this image it's optional
-# RUN npx playwright install --with-deps
+# Install deps as myuser (default user in this image)
+USER myuser
+RUN npm install --omit=dev
 
-# copy the rest and run
-COPY . ./
+# Copy the rest of your code with correct ownership
+COPY --chown=myuser:myuser . ./
+
+# Browsers are already included in this image, no need for playwright install
 CMD ["npm","start"]
