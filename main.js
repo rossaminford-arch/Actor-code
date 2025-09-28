@@ -3,46 +3,36 @@ import { PlaywrightCrawler } from 'crawlee';
 
 await Actor.init();
 
-// Expected input:
-// { "startUrls": [{ "url": "https://example.com" }], "maxRequestsPerCrawl": 1 }
 const input = (await Actor.getInput()) ?? {};
-const startUrls = (input.startUrls ?? []).map(u => u.url ?? u);
-const maxReq = input.maxRequestsPerCrawl ?? 1;
+const startUrls = (input.startUrls ?? [{ url: 'https://example.com' }]).map(
+  (u) => (typeof u === 'string' ? { url: u } : u)
+);
 
+const results = [];
 const crawler = new PlaywrightCrawler({
-  maxRequestsPerCrawl: maxReq,
-  // default Chromium from Playwright
-  requestHandler: async ({ page, request, log }) => {
-    // Try to settle the page
-    await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
-    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-
-    // Optional: dismiss common cookie banners quietly
-    const acceptBtn = page.locator('button:has-text("Accept"), button:has-text("I agree"), button:has-text("Agree")');
-    await acceptBtn.first().click({ timeout: 2000 }).catch(() => {});
-
-    const title = (await page.title())?.trim() ?? '';
-
-    // Keep only a handful of visible bullet-like <li> items
+  maxRequestsPerCrawl: input.maxRequestsPerCrawl ?? 1,
+  headless: true,
+  requestHandler: async ({ page, request }) => {
+    await page.waitForLoadState('domcontentloaded');
+    const title = await page.title();
     const bullets = await page.$$eval('li', els =>
-      els.slice(0, 8)
-        .map(e => e.textContent?.trim())
-        .filter(Boolean)
+      els.slice(0, 6).map(el => el.textContent?.trim()).filter(Boolean)
+    );
+    const imgs = await page.$$eval('img', imgs =>
+      imgs.map(i => i.src).filter(src => /^https?:\/\//.test(src))
     );
 
-    // Absolute image URLs
-    const imgs = await page.$$eval('img', els =>
-      els.map(e => e.src).filter(u => /^https?:\/\//i.test(u))
-    );
-
-    await Actor.pushData({
+    results.push({
       url: request.loadedUrl ?? request.url,
       title,
       bullets,
-      imgs
+      imgs,
     });
   },
 });
 
-await crawler.run(startUrls.length ? startUrls : []);
+await crawler.run(startUrls);
+for (const r of results) await Actor.pushData(r);
+
 await Actor.exit();
+
