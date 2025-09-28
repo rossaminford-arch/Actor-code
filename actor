@@ -1,0 +1,21 @@
+import { Actor } from 'apify';
+import { CheerioCrawler } from 'crawlee';
+
+await Actor.init();
+const input = await Actor.getInput();
+// expected: { startUrls: [{ url: "https://..." }], maxRequestsPerCrawl: 1 }
+
+const results = [];
+const crawler = new CheerioCrawler({
+  maxRequestsPerCrawl: input.maxRequestsPerCrawl ?? 1,
+  requestHandler: async ({ $, request }) => {
+    const title = $('h1').first().text().trim();
+    const bullets = $('li').slice(0, 6).map((i, el) => $(el).text().trim()).get();
+    const imgs = $('img').map((i, el) => $(el).attr('src')).get()
+      .filter((x) => x && /^https?/i.test(x));
+    results.push({ url: request.loadedUrl, title, bullets, imgs });
+  },
+});
+await crawler.run((input.startUrls || []).map(u => u.url));
+for (const r of results) await Actor.pushData(r);
+await Actor.exit();
