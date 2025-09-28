@@ -1,6 +1,5 @@
 {
   "name": "actor-code",
-  "version": "0.0.1",
-  "buildTag": "latest",
-  "baseDockerImage": "apify/actor-node-playwright-chrome:20"
+  "version": "0.0",
+  "dockerImage": "apify/actor-node-playwright-chrome:20"
 }
