@@ -1,14 +1,17 @@
 FROM apify/actor-node-playwright-chrome:20
 
+# App directory and permissions
 WORKDIR /usr/src/app
+RUN mkdir -p /usr/src/app && chown -R myuser:myuser /usr/src/app
+
+# Switch to non-root user *after* chown
 USER myuser
 
-# Copy only manifests first
+# Install deps
 COPY --chown=myuser:myuser package*.json ./
-
-# No lockfile? then just install
 RUN npm install --omit=dev
 
-# Copy the rest and run
-COPY --chown=myuser:myuser . ./
+# Copy the rest
+COPY --chown=myuser:myuser . .
+
 CMD ["node", "main.js"]
