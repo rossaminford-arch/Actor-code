@@ -1,14 +1,12 @@
 {
-  "name": "pdp-scraper",
-  "version": "1.0.0",
+  "name": "actor-code",
+  "version": "0.0.1",
   "type": "module",
-  "main": "main.mjs",
   "scripts": {
-    "start": "node main.mjs",
-    "build": "echo \"no build step\""
+    "start": "node main.js"
   },
   "dependencies": {
-    "apify": "^3.1.9",
-    "crawlee": "^3.6.4"
+    "apify": "^3.4.5",
+    "crawlee": "^3.15.0"
   }
 }
