@@ -1,38 +1,24 @@
 import { Actor } from 'apify';
-import { PlaywrightCrawler } from 'crawlee';
+import { PlaywrightCrawler } from '@crawlee/playwright';
 
 await Actor.init();
+const input = await Actor.getInput(); // { startUrls: [{ url }], maxRequestsPerCrawl }
+const startUrls = (input?.startUrls ?? []).map(u => u.url);
 
-const input = (await Actor.getInput()) ?? {};
-const startUrls = (input.startUrls ?? [{ url: 'https://example.com' }]).map(
-  (u) => (typeof u === 'string' ? { url: u } : u)
-);
-
-const results = [];
 const crawler = new PlaywrightCrawler({
-  maxRequestsPerCrawl: input.maxRequestsPerCrawl ?? 1,
-  headless: true,
+  maxRequestsPerCrawl: input?.maxRequestsPerCrawl ?? 1,
   requestHandler: async ({ page, request }) => {
     await page.waitForLoadState('domcontentloaded');
-    const title = await page.title();
-    const bullets = await page.$$eval('li', els =>
-      els.slice(0, 6).map(el => el.textContent?.trim()).filter(Boolean)
-    );
-    const imgs = await page.$$eval('img', imgs =>
-      imgs.map(i => i.src).filter(src => /^https?:\/\//.test(src))
+    // tweak selectors as needed
+    const title = (await page.locator('h1').first().textContent())?.trim() ?? null;
+    const bullets = await page.locator('li').allTextContents();
+    const imgs = await page.locator('img').evaluateAll(els =>
+      els.map(e => e.src).filter(src => /^https?:\/\//.test(src))
     );
 
-    results.push({
-      url: request.loadedUrl ?? request.url,
-      title,
-      bullets,
-      imgs,
-    });
+    await Actor.pushData({ url: request.loadedUrl ?? request.url, title, bullets, imgs });
   },
 });
 
 await crawler.run(startUrls);
-for (const r of results) await Actor.pushData(r);
-
 await Actor.exit();
-
